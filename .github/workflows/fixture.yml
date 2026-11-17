@@ -28,8 +28,7 @@ jobs:
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
           tag="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           for label in baseline alternate; do
-            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.buildLabel=$label" -o serve main.go
-            docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+            docker buildx build --platform linux/amd64 --build-arg "FIXTURE=$label" --provenance=false --sbom=false \
               --output "type=image,push=true,oci-mediatypes=true" \
               --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
               -t "$image:$tag-$label" --metadata-file "$RUNNER_TEMP/$label.json" .

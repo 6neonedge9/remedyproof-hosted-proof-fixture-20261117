@@ -1,0 +1,11 @@
+{
+  "name": "remedyproof-public-runtime-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "next": "15.5.29",
+    "react": "19.2.5",
+    "react-dom": "19.2.5"
+  },
+  "scripts": { "build": "next build" }
+}
