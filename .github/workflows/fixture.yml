@@ -1,0 +1,46 @@
+name: Fixture attestation
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+jobs:
+  attest:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build and publish two fixture manifests
+        id: image
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          export DOCKER_CONFIG="$RUNNER_TEMP/fixture-docker"
+          install -d -m 700 "$DOCKER_CONFIG"
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tag="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          for label in baseline alternate; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.buildLabel=$label" -o serve main.go
+            docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+              --output "type=image,push=true,oci-mediatypes=true" \
+              --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+              -t "$image:$tag-$label" --metadata-file "$RUNNER_TEMP/$label.json" .
+          done
+          echo "name=$image" >> "$GITHUB_OUTPUT"
+          echo "digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/baseline.json")" >> "$GITHUB_OUTPUT"
+          printf 'baseline=%s\nalternate=%s\n' \
+            "$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/baseline.json")" \
+            "$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/alternate.json")" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: false
